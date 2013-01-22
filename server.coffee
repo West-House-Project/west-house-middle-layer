@@ -9,10 +9,12 @@ MCONTROL_API_PATH = '/mControl/api'
 app = express()
 server = http.createServer app
 
-port = process.argv[2]||3000
-
+PORT = process.argv[2]||3000
+PUBLIC_DIR = path.join __dirname, 'public'
 
 # ## `getDevices`
+#
+# TODO: put this in a new module.
 #
 # Gets the list of all devices from an instance of mControl.
 getDevices = (callback) ->
@@ -34,6 +36,7 @@ getDevices = (callback) ->
 
   request.end()
 
+# TODO: put this in a new module.
 getDevice = (id, callback) ->
   request = http.request {
     host: settings.host
@@ -53,6 +56,7 @@ getDevice = (id, callback) ->
 
   request.end()
 
+# TODO: put this in a new module.
 sendCommand = (id, data, callback) ->
   request = http.request {
     host: settings.host
@@ -60,10 +64,19 @@ sendCommand = (id, data, callback) ->
     method: 'PUT'
     headers:
       'Content-Type': 'text/json'
-  }, ->
-    callback null
+  }, (res) ->
+    res.setEncoding 'utf8'
+
+    data = ''
+
+    res.on 'data', (chunk) ->
+      data += chunk
+
+    res.on 'end', ->
+      callback null, data
 
   request.write JSON.stringify data
+  request.end()
 
 app.use express.bodyParser()
 app.use express.methodOverride()
@@ -71,21 +84,43 @@ app.use express.errorHandler
   dumpException: true
   showStack: true
 app.use app.router
+app.use express.static PUBLIC_DIR
 
-app.get '/', (req, res) ->
+# TODO: put this in a new module.
+rest =
+  get: (route, desc, cb) ->
+    cb = desc unless cb?
+    app.get route, cb
+
+  post: (route, desc, cb) ->
+    cb = desc unless cb?
+    app.post route, cb
+
+  put: (route, desc, cb) ->
+    cb = desc unless cb?
+    app.put route, cb
+
+  'delete': (route, desc, cb) ->
+    cb = desc unless cb?
+    app.put route, cb
+
+rest.get '/', (req, res) ->
   res.json 400, { message: "Please head over to /devices." }
 
-app.get '/devices', (req, res) ->
+rest.get '/devices', (req, res) ->
   getDevices (err, data) ->
     res.jsonp data
 
-app.get '/devices/:id', (req, res) ->
+rest.get '/devices/:id', (req, res) ->
   getDevice req.params.id, (err, data) ->
     res.jsonp data
 
-app.put '/devices/:id/send_command', (req, res) ->
+rest.put '/devices/:id/send_command', (req, res) ->
   sendCommand req.params.id, req.body, ->
-    console.log "Good to go."
+    res.send "Success"
 
-server.listen port
-console.log "Server listening on port #{port}"
+rest.get '/send_command', (req, res) ->
+  res.sendfile path.join __dirname, 'public', 'index.html'
+
+server.listen PORT
+console.log "Server listening on port #{PORT}"

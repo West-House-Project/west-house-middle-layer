@@ -6,10 +6,8 @@ settings = require './settings.json'
 
 MCONTROL_API_PATH = '/mControl/api'
 
-#app = express()
-#server = http.createServer app
-
 app = express()
+server = http.createServer app
 
 PORT = process.argv[2]||3000
 PUBLIC_DIR = path.join __dirname, 'public'
@@ -121,6 +119,5 @@ rest.put '/devices/:id/send_command', (req, res) ->
 rest.get '/send_command', (req, res) ->
   res.sendfile path.join __dirname, 'public', 'index.html'
 
-#server.listen PORT
-app.listen PORT
+server.listen PORT
 console.log "Server listening on port #{PORT}"

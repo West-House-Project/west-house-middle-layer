@@ -1,15 +1,24 @@
-express = require 'express'
-http    = require 'http'
-path    = require 'path'
+express    = require 'express'
+http       = require 'http'
+path       = require 'path'
+commander  = require 'commander'
+settings   = require './settings.json'
+pkg        = require './package.json'
 
-settings = require './settings.json'
+commander
+  .version(pkg.version)
+  .option('-p, --port <n>', 'The port number to broadcast and listen to.', parseInt)
+  .option('-s, --silent', "Don't poll the database.")
+  .parse(process.argv)
+
+bcpmHelper = require './bcpm-helper.coffee' unless commander.silent
 
 MCONTROL_API_PATH = '/mControl/api'
 
 app = express()
 server = http.createServer app
 
-PORT = process.argv[2]||3000
+PORT = commander.process or process.env.PORT or 3000
 PUBLIC_DIR = path.join __dirname, 'public'
 
 # ## `getDevices`
@@ -32,7 +41,10 @@ getDevices = (callback) ->
       data += chunk
 
     res.on 'end', ->
-      callback null, JSON.parse data
+      try
+        callback null, JSON.parse data
+      catch e
+        callback e
 
   request.end()
 
@@ -52,7 +64,10 @@ getDevice = (id, callback) ->
       data += chunk
 
     res.on 'end', ->
-      callback null, JSON.parse data
+      try
+        callback null, JSON.parse data
+      catch e
+        callback e
 
   request.end()
 
@@ -104,20 +119,49 @@ rest =
 rest.get '/', (req, res) ->
   res.json 400, { message: "Please head over to /devices." }
 
+rest.get '/nothing', (req, res) ->
+  res.json { message: "There is nothing here." }
+
 rest.get '/devices', (req, res) ->
   getDevices (err, data) ->
-    res.jsonp data
+    console.log data
+    if data?
+      res.json data
+    else
+      res.json { messag: "Nothing." }
 
 rest.get '/devices/:id', (req, res) ->
   getDevice req.params.id, (err, data) ->
-    res.jsonp data
+    res.json data
+
+rest.get '/data/bcpm', (req, res) ->
+  getDevices (err, data) ->
+    res.json 501, { message: "Not yet implemented." }
 
 rest.put '/devices/:id/send_command', (req, res) ->
+  console.log req.params.id
+  console.log req.body
   sendCommand req.params.id, req.body, ->
     res.send "Success"
 
 rest.get '/send_command', (req, res) ->
   res.sendfile path.join __dirname, 'public', 'index.html'
+
+# TODO: due to time-constraint rendering our inability to test at the moment,
+#   we decided to poll for data from within *this* project.
+#
+#   this is insanely bad, since the polling is tightly coupled with being only
+#   a middle-layer.
+#
+#   Eventually, we would need to refactor this so that the polling is done from
+#   another server instead.
+
+unless commander.silent
+  setInterval ->
+    getDevices (err, data) ->
+      console.log err if err
+      bcpmHelper.parse data
+  , 1000 * 10
 
 server.listen PORT
 console.log "Server listening on port #{PORT}"
